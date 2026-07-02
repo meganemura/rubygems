@@ -9,11 +9,20 @@ class Gem::CredentialStore; end unless defined?(Gem::CredentialStore)
 # tool. +security+ has no way to read a password from stdin as raw bytes
 # for +add-generic-password+, so #set uses +security -i+ (batch/interactive
 # mode, one tokenized command per stdin line) to keep the secret off argv
-# and out of +ps+ output. This means a secret containing a literal newline
-# cannot be stored; that is a documented limitation, not a bug.
+# and out of +ps+ output.
+#
+# The secret is limited to printable ASCII. A newline would start a second
+# command in the +security -i+ batch, and +security find-generic-password
+# -w+ prints any non-printable byte back as a hex string rather than the
+# original value, so a non-ASCII secret would round-trip corrupted. #set
+# rejects such secrets so the caller falls back to file storage instead of
+# silently storing something it cannot read back. The account and service
+# are likewise refused a newline to keep them from injecting a second batch
+# command.
 
 class Gem::CredentialStore::MacOSBackend
   NOT_FOUND_STATUS = 44
+  PRINTABLE_ASCII = /\A[\x20-\x7e]*\z/
 
   def self.get(service, account)
     out, status = Open3.capture2(
@@ -27,7 +36,9 @@ class Gem::CredentialStore::MacOSBackend
   end
 
   def self.set(service, account, secret)
-    raise ArgumentError, "credential secret must not contain a newline" if secret.include?("\n")
+    raise ArgumentError, "credential secret must be printable ASCII for the macOS keychain" unless secret.match?(PRINTABLE_ASCII)
+    raise ArgumentError, "credential account must not contain a newline" if account.include?("\n")
+    raise ArgumentError, "credential service must not contain a newline" if service.include?("\n")
 
     command = "add-generic-password -U -a #{quote(account)} -s #{quote(service)} -w #{quote(secret)}\n"
     _out, status = Open3.capture2("security", "-i", stdin_data: command, err: File::NULL)

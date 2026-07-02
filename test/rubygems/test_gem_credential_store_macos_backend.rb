@@ -88,6 +88,21 @@ class TestGemCredentialStoreMacosBackend < Gem::TestCase
     end
   end
 
+  def test_set_rejects_non_ascii_secret
+    # security find-generic-password -w returns non-printable bytes as a hex
+    # string, so a non-ASCII secret would round-trip corrupted. Reject it so
+    # the caller falls back to file storage instead.
+    assert_raise(ArgumentError) do
+      Gem::CredentialStore::MacOSBackend.set("rubygems", "example.org", "péあ")
+    end
+  end
+
+  def test_set_rejects_account_with_newline
+    assert_raise(ArgumentError) do
+      Gem::CredentialStore::MacOSBackend.set("rubygems", "acct\nadd-generic-password", "secret")
+    end
+  end
+
   def test_delete_returns_true_on_success
     with_fake_env(exit: 0) do
       assert Gem::CredentialStore::MacOSBackend.delete("rubygems", "example.org")
