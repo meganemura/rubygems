@@ -22,9 +22,8 @@ class Gem::Commands::SigninCommand < Gem::Command
     " https://rubygems.org). The host can be provided with the host flag or can"\
     " be inferred from the provided gem. Host resolution matches the resolution"\
     " strategy for the push command. If the :credential_store: gemrc option (or"\
-    " RUBYGEMS_CREDENTIAL_STORE environment variable) is enabled, the resulting API key is"\
-    " stored in the operating system's credential store instead of"\
-    " ~/.gem/credentials."
+    " RUBYGEMS_CREDENTIAL_STORE environment variable) is set, the resulting API key is"\
+    " stored in the credential store it selects instead of ~/.gem/credentials."
   end
 
   def usage # :nodoc:

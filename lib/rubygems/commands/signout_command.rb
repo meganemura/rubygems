@@ -10,8 +10,8 @@ class Gem::Commands::SignoutCommand < Gem::Command
   def description # :nodoc:
     "The `signout` command is used to sign out from all current sessions,"\
     " allowing you to sign in using a different set of credentials. If the"\
-    " :credential_store: gemrc option is enabled, the API key is also removed from the"\
-    " operating system's credential store."
+    " :credential_store: gemrc option is set, the API key is also removed from"\
+    " the credential store it selects."
   end
 
   def usage # :nodoc:
