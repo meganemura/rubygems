@@ -174,8 +174,12 @@ learn more about their operation in [bundle install(1)](bundle-install.1.html).
    system's native store (macOS Keychain, Linux Secret Service, Windows
    Credential Manager) when one is available on this platform, or to the name
    of a backend provided by a third-party gem, such as `1password`. Falls
-   back to the config file when the store is unavailable or fails. Defaults to
-   false.
+   back to the config file when the store is unavailable or fails, warning
+   that the credential was written in plain text. Defaults to false.
+   Credentials already written to the config file are not migrated
+   automatically; re-run `bundle config set <host> <user:pass>` with the
+   setting enabled to move each one into the store. Being experimental, the
+   name and behavior of this setting may change in a future release.
 * `default_cli_command` (`BUNDLE_DEFAULT_CLI_COMMAND`):
    The command that running `bundle` without arguments should run. Defaults to
    `cli_help` since Bundler 4, but can also be `install` which was the previous

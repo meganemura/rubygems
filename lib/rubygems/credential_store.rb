@@ -106,7 +106,9 @@ class Gem::CredentialStore
     begin
       require "rubygems/credential_store/backends/#{name}"
     rescue LoadError
-      warn_once "Credential store backend #{name.inspect} is not installed; falling back to file storage."
+      warn_once "Credential store backend #{name.inspect} is not installed. " \
+                "Install a gem that provides rubygems/credential_store/backends/#{name}, " \
+                "or unset the credential_store setting. Falling back to file storage."
       return nil
     end
 
