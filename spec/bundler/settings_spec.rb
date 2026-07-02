@@ -347,6 +347,23 @@ that would suck --ehhh=oh geez it looks like i might have broken bundler somehow
         expect(settings.credentials_for(uri)).to be_nil
       end
     end
+
+    context "when the paired RubyGems has no credential store" do
+      before do
+        settings.set_local "credential_store", "true"
+        allow(settings).to receive(:require).and_call_original
+        allow(settings).to receive(:require).with("rubygems/credential_store").and_raise(LoadError)
+      end
+
+      it "warns once and falls back to the config file without raising" do
+        allow(Bundler.ui).to receive(:warn)
+
+        expect { settings.set_local "gemserver.example.org", "username:password" }.not_to raise_error
+        expect(settings.credentials_for(uri)).to eq("username:password")
+
+        expect(Bundler.ui).to have_received(:warn).once
+      end
+    end
   end
 
   describe "credential storage with credential_store enabled" do

@@ -401,8 +401,10 @@ module Bundler
       spec = credential_store_spec
       return nil unless spec
 
-      require "rubygems/credential_store"
-      Gem::CredentialStore.for(spec)
+      store_class = credential_store_class
+      return nil unless store_class
+
+      store_class.for(spec)
     end
 
     def credential_store_spec
@@ -411,6 +413,28 @@ module Bundler
       when "true", true then true
       else value.to_s
       end
+    end
+
+    # The Gem::CredentialStore class, or nil when the paired RubyGems is too
+    # old to ship one. In that case the setting is honored as a no-op with a
+    # one-time warning so a bundle keeps using the config file instead of
+    # raising. Bundler can run on an older RubyGems than it was released with.
+    def credential_store_class
+      return @credential_store_class if defined?(@credential_store_class)
+
+      @credential_store_class =
+        begin
+          require "rubygems/credential_store"
+          Gem::CredentialStore if Gem::CredentialStore.respond_to?(:for)
+        rescue LoadError
+          nil
+        end
+
+      if @credential_store_class.nil?
+        Bundler.ui.warn "The `credential_store` setting is set but this RubyGems does not provide a credential store. Falling back to the Bundler config file."
+      end
+
+      @credential_store_class
     end
 
     ##
