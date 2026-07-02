@@ -2,6 +2,7 @@
 
 require_relative "helper"
 require "rubygems/config_file"
+require "rubygems/credential_store"
 
 class TestGemConfigFile < Gem::TestCase
   def setup

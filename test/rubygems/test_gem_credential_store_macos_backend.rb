@@ -147,14 +147,24 @@ class TestGemCredentialStoreMacosBackend < Gem::TestCase
     end
   end
 
-  def test_get_raises_when_command_missing
+  def test_get_returns_no_credential_when_command_missing
     empty_dir = File.join(@tempdir, "empty-bin")
     FileUtils.mkdir_p(empty_dir)
 
+    # A missing security binary must not yield a credential. MRI raises
+    # Errno::ENOENT from Open3; other implementations (JRuby) report a
+    # failure status instead of raising, so accept either and assert only
+    # that nothing is returned. Gem::CredentialStore#get traps the error
+    # class either way.
     with_env(ENV.to_h.merge("PATH" => empty_dir)) do
-      assert_raise(Errno::ENOENT) do
-        Gem::CredentialStore::MacOSBackend.get("rubygems", "example.org")
-      end
+      result =
+        begin
+          Gem::CredentialStore::MacOSBackend.get("rubygems", "example.org")
+        rescue StandardError
+          nil
+        end
+
+      assert_nil result
     end
   end
 
