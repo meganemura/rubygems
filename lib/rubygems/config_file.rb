@@ -409,19 +409,6 @@ if you believe they were disclosed to a third party.
   end
 
   ##
-  # True if the default RubyGems.org API key is present in the credential
-  # store. Used by the +signout+ command, whose file-based check
-  # (+credentials_path+ existence) misses a key that was only ever stored
-  # in the credential store.
-
-  def credential_store_signed_in?
-    return false unless credential_store
-    return false unless store = active_credential_store
-
-    !store.get(CREDENTIAL_STORE_DEFAULT_ACCOUNT).nil?
-  end
-
-  ##
   # Set a specific host's API key to +api_key+
 
   def set_api_key(host, api_key)
@@ -445,11 +432,12 @@ if you believe they were disclosed to a third party.
 
   ##
   # Remove the +~/.gem/credentials+ file to clear all the current sessions,
-  # and the default RubyGems.org key from the credential store, when the
-  # #credential_store setting is on.
+  # and every RubyGems key from the credential store when the
+  # #credential_store setting is on, including keys saved for other hosts
+  # with <tt>gem signin --host</tt>.
 
   def unset_api_key!
-    active_credential_store&.delete(CREDENTIAL_STORE_DEFAULT_ACCOUNT)
+    active_credential_store&.delete_all
 
     return false unless File.exist?(credentials_path)
 

@@ -29,17 +29,20 @@ class Gem::CredentialStore
   ##
   # Returns the store to use for +spec+, or +nil+ when the credential store
   # is off. +spec+ is either +true+ (use this platform's native backend) or
-  # the name of a registered backend such as "1password". The store is
-  # memoized per +spec+ for the life of the process, so the read cache and
+  # the name of a registered backend such as "1password". +service+ names
+  # the account namespace within the backend, so RubyGems and Bundler keep
+  # separate credentials in one native store. The store is memoized per
+  # +spec+ and +service+ for the life of the process, so the read cache and
   # any expensive backend startup are shared across callers. A test may
   # install a stand-in via #instance= that is returned here for any enabled
-  # +spec+.
+  # +spec+, or inject a shared backend via #backend=.
 
-  def self.for(spec)
+  def self.for(spec, service: SERVICE_NAME)
     return nil unless spec
     return @override if defined?(@override) && @override
 
-    (@instances ||= {})[spec] ||= new(backend: backend_for(spec))
+    backend = defined?(@override_backend) && @override_backend ? @override_backend : backend_for(spec)
+    (@instances ||= {})[[spec, service]] ||= new(backend: backend, service: service)
   end
 
   ##
@@ -59,11 +62,21 @@ class Gem::CredentialStore
   end
 
   ##
-  # Clears the memoized stores, the injected override, and the one-time
+  # Installs a shared backend that .for wraps for every spec and service.
+  # Intended for tests that need RubyGems and Bundler credentials to land in
+  # one backend under their own service names.
+
+  def self.backend=(backend)
+    @override_backend = backend
+  end
+
+  ##
+  # Clears the memoized stores, the injected overrides, and the one-time
   # warning flag. Intended for tests only.
 
   def self.reset!
     @override = nil
+    @override_backend = nil
     @instances = nil
     @warned = false
   end
@@ -135,10 +148,12 @@ class Gem::CredentialStore
 
   ##
   # +backend+ is only used by tests to inject a fake backend regardless of
-  # the platform the test suite happens to run on.
+  # the platform the test suite happens to run on. +service+ is the account
+  # namespace this store reads and writes under.
 
-  def initialize(backend: self.class.default_backend)
+  def initialize(backend: self.class.default_backend, service: SERVICE_NAME)
     @backend = backend
+    @service = service
     @cache = {}
   end
 
@@ -157,7 +172,7 @@ class Gem::CredentialStore
     return nil unless @backend
     return @cache[account] if @cache.key?(account)
 
-    @cache[account] = @backend.get(SERVICE_NAME, account)
+    @cache[account] = @backend.get(@service, account)
   rescue StandardError => e
     warn_failure(e)
     nil
@@ -169,7 +184,7 @@ class Gem::CredentialStore
   def set(account, secret)
     return false unless @backend
 
-    if @backend.set(SERVICE_NAME, account, secret)
+    if @backend.set(@service, account, secret)
       @cache[account] = secret
       true
     else
@@ -187,8 +202,24 @@ class Gem::CredentialStore
   def delete(account)
     return false unless @backend
 
-    result = @backend.delete(SERVICE_NAME, account)
+    result = @backend.delete(@service, account)
     @cache.delete(account)
+    result
+  rescue StandardError => e
+    warn_failure(e)
+    false
+  end
+
+  ##
+  # Removes every entry this store owns (all accounts under its service).
+  # Returns +true+ when the store is now clear. Used by +gem signout+ to end
+  # every session at once, mirroring deletion of the whole credentials file.
+
+  def delete_all
+    return false unless @backend
+
+    result = @backend.delete_all(@service)
+    @cache.clear
     result
   rescue StandardError => e
     warn_failure(e)

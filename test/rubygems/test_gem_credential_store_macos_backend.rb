@@ -121,6 +121,32 @@ class TestGemCredentialStoreMacosBackend < Gem::TestCase
     end
   end
 
+  def test_delete_all_loops_until_not_found
+    # security deletes one entry per call; stub exits 0 twice, then 44.
+    counter = File.join(@tempdir, "counter")
+    File.write(counter, "0")
+    script = <<~RUBY
+      #!/usr/bin/env ruby
+      c = File.read(#{counter.inspect}).to_i
+      File.write(#{counter.inspect}, (c + 1).to_s)
+      exit(c < 2 ? 0 : 44)
+    RUBY
+    File.write(File.join(@fake_bin_dir, "security"), script)
+    File.chmod(0o755, File.join(@fake_bin_dir, "security"))
+
+    with_env(ENV.to_h.merge("PATH" => [@fake_bin_dir, ENV["PATH"]].join(File::PATH_SEPARATOR))) do
+      assert Gem::CredentialStore::MacOSBackend.delete_all("rubygems")
+    end
+
+    assert_equal 3, File.read(counter).to_i
+  end
+
+  def test_delete_all_returns_false_on_error
+    with_fake_env(exit: 1) do
+      refute Gem::CredentialStore::MacOSBackend.delete_all("rubygems")
+    end
+  end
+
   def test_get_raises_when_command_missing
     empty_dir = File.join(@tempdir, "empty-bin")
     FileUtils.mkdir_p(empty_dir)

@@ -397,6 +397,11 @@ module Bundler
     # Guarded by a cheap lookup so reading and writing settings costs nothing
     # extra when the setting is disabled.
 
+    # The account namespace Bundler uses in the shared native store, kept
+    # separate from RubyGems so that gem signout does not remove Bundler's
+    # host credentials.
+    CREDENTIAL_STORE_SERVICE = "bundler"
+
     def active_credential_store
       spec = credential_store_spec
       return nil unless spec
@@ -404,7 +409,7 @@ module Bundler
       store_class = credential_store_class
       return nil unless store_class
 
-      store_class.for(spec)
+      store_class.for(spec, service: CREDENTIAL_STORE_SERVICE)
     end
 
     def credential_store_spec

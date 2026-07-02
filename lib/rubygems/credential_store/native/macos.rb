@@ -53,6 +53,20 @@ class Gem::CredentialStore::MacOSBackend
     status.success? || status.exitstatus == NOT_FOUND_STATUS
   end
 
+  # security deletes one entry per call, so keep deleting the given service
+  # until it reports there is nothing left (exit 44). This only touches the
+  # given service and leaves entries for other services intact.
+  def self.delete_all(service)
+    loop do
+      _out, status = Open3.capture2(
+        "security", "delete-generic-password", "-s", service,
+        err: File::NULL
+      )
+      return true if status.exitstatus == NOT_FOUND_STATUS
+      return false unless status.success?
+    end
+  end
+
   def self.quote(value)
     %("#{value.gsub("\\", "\\\\\\\\").gsub('"', '\\"')}")
   end

@@ -52,4 +52,16 @@ class Gem::CredentialStore::LinuxBackend
     # secret-tool clear exits 1 with no stderr when nothing matched.
     status.exitstatus == 1 && err.to_s.strip.empty?
   end
+
+  # secret-tool clear removes every item matching the attributes, so a clear
+  # keyed on the service alone empties just that service.
+  def self.delete_all(service)
+    _out, err, status = Open3.capture3(
+      "secret-tool", "clear", "service", service
+    )
+    return true if status.success?
+
+    # Exits 1 with no stderr when there was nothing to clear.
+    status.exitstatus == 1 && err.to_s.strip.empty?
+  end
 end

@@ -23,4 +23,9 @@ class Gem::FakeCredentialBackend
     @data.delete([service, account])
     true
   end
+
+  def delete_all(service)
+    @data.reject! {|(entry_service, _account), _secret| entry_service == service }
+    true
+  end
 end

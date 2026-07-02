@@ -108,6 +108,27 @@ class TestGemCredentialStoreLinuxBackend < Gem::TestCase
     end
   end
 
+  def test_delete_all_clears_by_service_only
+    with_fake_env(exit: 0) do
+      assert Gem::CredentialStore::LinuxBackend.delete_all("rubygems")
+    end
+
+    record = read_record
+    assert_equal %w[clear service rubygems], record["argv"]
+  end
+
+  def test_delete_all_returns_true_when_nothing_matched
+    with_fake_env(stderr: "", exit: 1) do
+      assert Gem::CredentialStore::LinuxBackend.delete_all("rubygems")
+    end
+  end
+
+  def test_delete_all_returns_false_on_other_failure
+    with_fake_env(stderr: "unexpected D-Bus error", exit: 1) do
+      refute Gem::CredentialStore::LinuxBackend.delete_all("rubygems")
+    end
+  end
+
   private
 
   def with_fake_env(stdout: "", stderr: "", exit: 0)

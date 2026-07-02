@@ -99,6 +99,26 @@ class TestGemCredentialStoreWindowsBackend < Gem::TestCase
     end
   end
 
+  def test_delete_all_passes_service_and_succeeds
+    with_fake_env(exit: 0) do
+      assert Gem::CredentialStore::WindowsBackend.delete_all("rubygems")
+    end
+
+    assert_equal "rubygems", read_record["service_env"]
+  end
+
+  def test_delete_all_returns_true_when_resource_missing
+    with_fake_env(stderr: "Element not found. (Exception from HRESULT: 0x80070490)", exit: 1) do
+      assert Gem::CredentialStore::WindowsBackend.delete_all("rubygems")
+    end
+  end
+
+  def test_delete_all_returns_false_on_other_failure
+    with_fake_env(stderr: "Access is denied.", exit: 1) do
+      refute Gem::CredentialStore::WindowsBackend.delete_all("rubygems")
+    end
+  end
+
   def test_uses_powershell_exe_not_pwsh
     with_fake_env(stdout: "s3cr3t\n", exit: 0) do
       Gem::CredentialStore::WindowsBackend.get("rubygems", "example.org")

@@ -593,15 +593,19 @@ if you believe they were disclosed to a third party.
     end
   end
 
-  def test_credential_store_signed_in_reflects_credential_store_only_key
+  def test_unset_api_key_bang_removes_every_host_from_credential_store
     @cfg.credential_store = true
 
-    with_fake_credential_store do
-      refute @cfg.credential_store_signed_in?
-
+    with_fake_credential_store do |store|
       @cfg.rubygems_api_key = "x"
+      @cfg.set_api_key "https://other.example", "y"
+      assert_equal "x", store.get(Gem::ConfigFile::CREDENTIAL_STORE_DEFAULT_ACCOUNT)
+      assert_equal "y", store.get("https://other.example")
 
-      assert @cfg.credential_store_signed_in?
+      @cfg.unset_api_key!
+
+      assert_nil store.get(Gem::ConfigFile::CREDENTIAL_STORE_DEFAULT_ACCOUNT)
+      assert_nil store.get("https://other.example")
     end
   end
 

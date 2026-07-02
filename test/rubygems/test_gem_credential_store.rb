@@ -31,6 +31,12 @@ class TestGemCredentialStore < Gem::TestCase
       true
     end
 
+    def delete_all(service)
+      @calls << [:delete_all, service]
+      @data.reject! {|(entry_service, _account), _secret| entry_service == service }
+      true
+    end
+
     def get_call_count
       @get_calls
     end
@@ -46,6 +52,10 @@ class TestGemCredentialStore < Gem::TestCase
     end
 
     def delete(_service, _account)
+      raise Errno::ENOENT, "security"
+    end
+
+    def delete_all(_service)
       raise Errno::ENOENT, "security"
     end
   end
@@ -161,6 +171,39 @@ class TestGemCredentialStore < Gem::TestCase
 
   def test_instance_returns_the_same_object
     assert_same Gem::CredentialStore.instance, Gem::CredentialStore.instance
+  end
+
+  def test_delete_all_clears_the_service
+    backend = FakeBackend.new
+    backend.set(Gem::CredentialStore::SERVICE_NAME, "acct", "s")
+    store = Gem::CredentialStore.new(backend: backend)
+
+    assert store.delete_all
+    assert_nil backend.get(Gem::CredentialStore::SERVICE_NAME, "acct")
+  end
+
+  def test_delete_all_without_backend_is_safe
+    store = Gem::CredentialStore.new(backend: nil)
+    refute store.delete_all
+  end
+
+  def test_delete_all_swallows_backend_errors
+    store = Gem::CredentialStore.new(backend: RaisingBackend.new)
+    refute store.delete_all
+  end
+
+  def test_delete_all_only_removes_its_own_service
+    backend = FakeBackend.new
+    Gem::CredentialStore.backend = backend
+    gem_store = Gem::CredentialStore.for(true, service: "rubygems")
+    bundler_store = Gem::CredentialStore.for(true, service: "bundler")
+    gem_store.set("acct", "gem-key")
+    bundler_store.set("gems.example.com", "user:pass")
+
+    gem_store.delete_all
+
+    assert_nil gem_store.get("acct")
+    assert_equal "user:pass", bundler_store.get("gems.example.com")
   end
 
   def test_for_returns_nil_when_disabled

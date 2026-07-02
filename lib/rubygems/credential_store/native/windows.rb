@@ -65,6 +65,24 @@ class Gem::CredentialStore::WindowsBackend
     status.success? || missing_credential?(err)
   end
 
+  # Removes every credential stored under the given resource (service),
+  # leaving other resources untouched. FindAllByResource raises when the
+  # resource has no entries, which is treated as an empty, successful clear.
+  def self.delete_all(service)
+    script = <<~POWERSHELL
+      #{LOAD_VAULT_TYPE}
+      $vault = New-Object Windows.Security.Credentials.PasswordVault
+      try {
+        $vault.FindAllByResource($env:RUBYGEMS_CRED_SERVICE) | ForEach-Object { $vault.Remove($_) }
+      } catch {
+        if (-not ($_.Exception.Message -match 'not found|0x80070490')) { throw }
+      }
+    POWERSHELL
+
+    _out, err, status = run(script, service, nil)
+    status.success? || missing_credential?(err)
+  end
+
   def self.run(script, service, account, secret = nil)
     env = { "RUBYGEMS_CRED_SERVICE" => service, "RUBYGEMS_CRED_ACCOUNT" => account }
     env["RUBYGEMS_CRED_SECRET"] = secret if secret
