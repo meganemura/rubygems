@@ -479,6 +479,32 @@ if you believe they were disclosed to a third party.
     assert @cfg.credential_store
   end
 
+  def test_credential_store_backend_name_from_gemrc
+    File.open @temp_conf, "w" do |fp|
+      fp.puts ":credential_store: 1password"
+    end
+
+    util_config_file %W[--config-file=#{@temp_conf}]
+
+    assert_equal "1password", @cfg.credential_store
+  end
+
+  def test_credential_store_backend_name_from_environment_variable
+    with_env(ENV.to_h.merge("RUBYGEMS_CREDENTIAL_STORE" => "1password")) do
+      util_config_file
+    end
+
+    assert_equal "1password", @cfg.credential_store
+  end
+
+  def test_credential_store_false_environment_variable_keeps_default
+    with_env(ENV.to_h.merge("RUBYGEMS_CREDENTIAL_STORE" => "false")) do
+      util_config_file
+    end
+
+    refute @cfg.credential_store
+  end
+
   def test_rubygems_api_key_equals_with_credential_store_writes_to_credential_store_not_file
     @cfg.credential_store = true
 
@@ -503,6 +529,17 @@ if you believe they were disclosed to a third party.
 
       assert_equal "x", store.get("https://example.org")
       assert_equal original_file_contents, load_yaml_file(@cfg.credentials_path)
+    end
+  end
+
+  def test_named_backend_routes_reads_and_writes_to_the_store
+    @cfg.credential_store = "1password"
+
+    with_fake_credential_store do |store|
+      @cfg.rubygems_api_key = "x"
+
+      assert_equal "x", store.get(Gem::ConfigFile::CREDENTIAL_STORE_DEFAULT_ACCOUNT)
+      assert_equal "x", @cfg.rubygems_api_key
     end
   end
 

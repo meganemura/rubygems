@@ -195,10 +195,12 @@ class Gem::ConfigFile
 
   ##
   # == Experimental ==
-  # Store and read push/authentication credentials in the operating
-  # system's native credential store (macOS Keychain, Linux Secret
-  # Service, Windows Credential Manager) instead of the plain text
-  # credentials file, when a native store is available on this platform.
+  # Store and read push/authentication credentials in a credential store
+  # instead of the plain text credentials file. +true+ selects the operating
+  # system's native store (macOS Keychain, Linux Secret Service, Windows
+  # Credential Manager) when one is available on this platform. A string
+  # selects a named backend registered by a third-party gem, such as
+  # +"1password"+. +false+ (the default) keeps using the credentials file.
 
   attr_accessor :credential_store
 
@@ -236,7 +238,7 @@ class Gem::ConfigFile
     @ipv4_fallback_enabled = ENV["IPV4_FALLBACK_ENABLED"] == "true" || DEFAULT_IPV4_FALLBACK_ENABLED
     @global_gem_cache = ENV["RUBYGEMS_GLOBAL_GEM_CACHE"] == "true" || DEFAULT_GLOBAL_GEM_CACHE
     @use_psych = ENV["RUBYGEMS_USE_PSYCH"] == "true" || DEFAULT_USE_PSYCH
-    @credential_store = ENV["RUBYGEMS_CREDENTIAL_STORE"] == "true" || DEFAULT_CREDENTIAL_STORE
+    @credential_store = normalize_credential_store(ENV["RUBYGEMS_CREDENTIAL_STORE"], DEFAULT_CREDENTIAL_STORE)
 
     operating_system_config = Marshal.load Marshal.dump(OPERATING_SYSTEM_DEFAULTS)
     platform_config = Marshal.load Marshal.dump(PLATFORM_DEFAULTS)
@@ -697,7 +699,18 @@ if you believe they were disclosed to a third party.
     return nil unless credential_store
 
     require_relative "credential_store"
-    Gem::CredentialStore.instance
+    Gem::CredentialStore.for(credential_store)
+  end
+
+  # Interprets a +credential_store+ value from the environment: +"true"+
+  # selects the native backend, +"false"+/blank selects +default+, and any
+  # other value is a backend name passed through as-is.
+  def normalize_credential_store(value, default)
+    case value
+    when nil, "", "false" then default
+    when "true" then true
+    else value
+    end
   end
 
   def set_config_file_name(args)
