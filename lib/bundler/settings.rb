@@ -428,7 +428,10 @@ module Bundler
     def credentials_from_store(uri)
       return nil unless store = active_credential_store
 
-      store.get(uri.to_s) || store.get(uri.host)
+      # Normalize with key_for so a value stored under, say,
+      # "https://host/" is found when the source URI is "https://host",
+      # exactly as the config-file path already matches via self[].
+      store.get(key_for(uri.to_s)) || store.get(key_for(uri.host))
     end
 
     def to_array(value)
@@ -444,18 +447,17 @@ module Bundler
 
     def set_key(raw_key, value, hash, file)
       raw_key = self.class.key_to_s(raw_key)
+      key = key_for(raw_key)
 
       if (store = active_credential_store) && credential_store_key?(raw_key)
         if value.nil?
-          store.delete(raw_key)
-        elsif value.is_a?(String) && is_userinfo(value) && store.set(raw_key, value)
+          store.delete(key)
+        elsif value.is_a?(String) && is_userinfo(value) && store.set(key, value)
           return
         end
       end
 
       value = array_to_s(value) if is_array(raw_key)
-
-      key = key_for(raw_key)
 
       return if hash[key] == value
 

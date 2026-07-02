@@ -285,21 +285,38 @@ that would suck --ehhh=oh geez it looks like i might have broken bundler somehow
         expect(settings.credentials_for(uri)).to be_nil
       end
 
-      it "returns credentials stored under the full URL" do
-        fake_store.set(uri.to_s, credentials)
+      it "round-trips credentials set under the full URL" do
+        settings.set_local "https://gemserver.example.org/", credentials
 
         expect(settings.credentials_for(uri)).to eq(credentials)
       end
 
-      it "returns credentials stored under the hostname" do
-        fake_store.set(uri.host, credentials)
+      it "round-trips credentials set under the hostname" do
+        settings.set_local "gemserver.example.org", credentials
 
         expect(settings.credentials_for(uri)).to eq(credentials)
+      end
+
+      it "matches a URL key regardless of a trailing slash, like the config file does" do
+        settings.set_local "https://gemserver.example.org", credentials
+
+        expect(settings.credentials_for(Gem::URI("https://gemserver.example.org/"))).to eq(credentials)
+      end
+
+      it "does not write the secret to the local config file" do
+        settings.set_local "gemserver.example.org", credentials
+
+        expect(settings.locations("gemserver.example.org")[:local]).to be_nil
       end
 
       it "prefers the credential_store over a stale local config value" do
+        # A plain-text credential left in the config file before the store
+        # was enabled, simulated by routing this one write to the file.
+        allow(settings).to receive(:active_credential_store).and_return(nil)
         settings.set_local "gemserver.example.org", "stale:value"
-        fake_store.set(uri.host, credentials)
+        allow(settings).to receive(:active_credential_store).and_call_original
+
+        settings.set_local "gemserver.example.org", credentials
 
         expect(settings.credentials_for(uri)).to eq(credentials)
       end
@@ -315,8 +332,8 @@ that would suck --ehhh=oh geez it looks like i might have broken bundler somehow
 
       after { Gem::CredentialStore.reset! }
 
-      it "reads credentials from the selected backend" do
-        fake_store.set(uri.host, credentials)
+      it "round-trips credentials through the selected backend" do
+        settings.set_local "gemserver.example.org", credentials
 
         expect(settings.credentials_for(uri)).to eq(credentials)
       end
@@ -345,7 +362,7 @@ that would suck --ehhh=oh geez it looks like i might have broken bundler somehow
     it "writes a host credential to the credential_store instead of the local config file" do
       settings.set_local "gemserver.example.org", "username:password"
 
-      expect(fake_store.get("gemserver.example.org")).to eq("username:password")
+      expect(fake_store.get(Bundler::Settings.key_for("gemserver.example.org"))).to eq("username:password")
       expect(settings.locations("gemserver.example.org")[:local]).to be_nil
     end
 
@@ -370,12 +387,13 @@ that would suck --ehhh=oh geez it looks like i might have broken bundler somehow
     end
 
     it "removes a credential_store-stored credential on unset" do
+      account = Bundler::Settings.key_for("gemserver.example.org")
       settings.set_local "gemserver.example.org", "username:password"
-      expect(fake_store.get("gemserver.example.org")).to eq("username:password")
+      expect(fake_store.get(account)).to eq("username:password")
 
       settings.set_local "gemserver.example.org", nil
 
-      expect(fake_store.get("gemserver.example.org")).to be_nil
+      expect(fake_store.get(account)).to be_nil
     end
   end
 
