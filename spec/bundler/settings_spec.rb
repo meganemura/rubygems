@@ -395,12 +395,27 @@ that would suck --ehhh=oh geez it looks like i might have broken bundler somehow
       expect(settings["gem.push_key"]).to eq("/path/to/key.pem")
     end
 
-    it "falls back to the local config file when the credential_store write fails" do
+    it "falls back to the local config file and warns when the credential_store write fails" do
       Gem::CredentialStore.instance = Gem::CredentialStore.new(backend: nil)
+      allow(Bundler.ui).to receive(:warn)
 
       settings.set_local "gemserver.example.org", "username:password"
 
       expect(settings["gemserver.example.org"]).to eq("username:password")
+      expect(Bundler.ui).to have_received(:warn).once
+    end
+
+    it "removes a stale plaintext credential from the config file once it moves to the store" do
+      # written to the config file before the store took over
+      allow(settings).to receive(:active_credential_store).and_return(nil)
+      settings.set_local "gemserver.example.org", "old:secret"
+      expect(settings.locations("gemserver.example.org")[:local]).to eq("old:secret")
+      allow(settings).to receive(:active_credential_store).and_call_original
+
+      settings.set_local "gemserver.example.org", "new:secret"
+
+      expect(fake_store.get(Bundler::Settings.key_for("gemserver.example.org"))).to eq("new:secret")
+      expect(settings.locations("gemserver.example.org")[:local]).to be_nil
     end
 
     it "removes a credential_store-stored credential on unset" do

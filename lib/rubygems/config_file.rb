@@ -379,9 +379,14 @@ if you believe they were disclosed to a third party.
   # Sets the RubyGems.org API key to +api_key+
 
   def rubygems_api_key=(api_key)
-    if credential_store && !api_key.to_s.empty? && (store = active_credential_store) && store.set(CREDENTIAL_STORE_DEFAULT_ACCOUNT, api_key)
-      @rubygems_api_key = api_key
-      return
+    if credential_store && !api_key.to_s.empty?
+      store = active_credential_store
+      if store&.set(CREDENTIAL_STORE_DEFAULT_ACCOUNT, api_key)
+        remove_api_key_from_file(:rubygems_api_key)
+        @rubygems_api_key = api_key
+        return
+      end
+      warn_credential_store_fallback
     end
 
     set_api_key :rubygems_api_key, api_key
@@ -420,22 +425,20 @@ if you believe they were disclosed to a third party.
   # Set a specific host's API key to +api_key+
 
   def set_api_key(host, api_key)
-    if credential_store && host != :rubygems_api_key && !api_key.to_s.empty? && (store = active_credential_store) && store.set(host.to_s, api_key)
-      return
+    if credential_store && host != :rubygems_api_key && !api_key.to_s.empty?
+      store = active_credential_store
+      if store&.set(host.to_s, api_key)
+        remove_api_key_from_file(host)
+        return
+      end
+      warn_credential_store_fallback
     end
 
     check_credentials_permissions
 
     config = load_file(credentials_path).merge(host => api_key)
 
-    dirname = File.dirname credentials_path
-    require "fileutils"
-    FileUtils.mkdir_p(dirname)
-
-    permissions = 0o600 & ~File.umask
-    File.open(credentials_path, "w", permissions) do |f|
-      f.write self.class.dump_with_rubygems_yaml(config)
-    end
+    write_credentials(config)
 
     load_api_keys # reload
   end
@@ -700,6 +703,38 @@ if you believe they were disclosed to a third party.
 
     require_relative "credential_store"
     Gem::CredentialStore.for(credential_store)
+  end
+
+  # Writes +config+ (a host => key hash) to the credentials file with 0600
+  # permissions, creating the directory if needed.
+  def write_credentials(config)
+    dirname = File.dirname credentials_path
+    require "fileutils"
+    FileUtils.mkdir_p(dirname)
+
+    permissions = 0o600 & ~File.umask
+    File.open(credentials_path, "w", permissions) do |f|
+      f.write self.class.dump_with_rubygems_yaml(config)
+    end
+  end
+
+  # Drops +host+'s plaintext key from the credentials file once it has moved
+  # into the credential store, so the secret does not linger on disk. Best
+  # effort: skips silently when the file is absent, unwritable, or lacks the
+  # key, since the authoritative copy is already in the store.
+  def remove_api_key_from_file(host)
+    return unless File.exist?(credentials_path) && File.writable?(credentials_path)
+
+    config = load_file(credentials_path)
+    return unless config.key?(host)
+
+    config.delete(host)
+    write_credentials(config)
+    load_api_keys
+  end
+
+  def warn_credential_store_fallback
+    alert_warning "Could not write the API key to the credential store, so it was written to #{credentials_path} in plain text."
   end
 
   # Interprets a +credential_store+ value from the environment: +"true"+

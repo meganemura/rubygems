@@ -476,8 +476,14 @@ module Bundler
       if (store = active_credential_store) && credential_store_key?(raw_key)
         if value.nil?
           store.delete(key)
-        elsif value.is_a?(String) && is_userinfo(value) && store.set(key, value)
-          return
+        elsif value.is_a?(String) && is_userinfo(value)
+          if store.set(key, value)
+            # Stored in the credential store, so drop any plaintext copy left
+            # in this config file by falling through with a nil value.
+            value = nil
+          else
+            Bundler.ui.warn "Could not write the credential to the credential store, so it was written to the Bundler config file in plain text."
+          end
         end
       end
 

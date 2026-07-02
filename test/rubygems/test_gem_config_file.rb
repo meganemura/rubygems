@@ -505,31 +505,46 @@ if you believe they were disclosed to a third party.
     refute @cfg.credential_store
   end
 
-  def test_rubygems_api_key_equals_with_credential_store_writes_to_credential_store_not_file
+  def test_rubygems_api_key_equals_with_credential_store_writes_to_store_and_clears_file
     @cfg.credential_store = true
 
     with_fake_credential_store do |store|
-      original_file_contents = load_yaml_file(@cfg.credentials_path)
-
       @cfg.rubygems_api_key = "x"
 
       assert_equal "x", @cfg.rubygems_api_key
       assert_equal "x", store.get(Gem::ConfigFile::CREDENTIAL_STORE_DEFAULT_ACCOUNT)
-      assert_equal original_file_contents, load_yaml_file(@cfg.credentials_path)
+      # The plaintext key from credential_setup is removed once it is stored.
+      refute_includes load_yaml_file(@cfg.credentials_path).keys, :rubygems_api_key
     end
   end
 
-  def test_set_api_key_with_credential_store_writes_to_credential_store_not_file
+  def test_set_api_key_with_credential_store_writes_to_store_and_removes_plaintext
+    # A plaintext host key written before the store was enabled.
+    @cfg.set_api_key "https://example.org", "old"
+    assert_equal "old", load_yaml_file(@cfg.credentials_path)["https://example.org"]
+
     @cfg.credential_store = true
 
     with_fake_credential_store do |store|
-      original_file_contents = load_yaml_file(@cfg.credentials_path)
+      @cfg.set_api_key "https://example.org", "new"
 
-      @cfg.set_api_key "https://example.org", "x"
-
-      assert_equal "x", store.get("https://example.org")
-      assert_equal original_file_contents, load_yaml_file(@cfg.credentials_path)
+      assert_equal "new", store.get("https://example.org")
+      refute_includes load_yaml_file(@cfg.credentials_path).keys, "https://example.org"
     end
+  end
+
+  def test_rubygems_api_key_equals_warns_and_uses_file_when_store_write_fails
+    @cfg.credential_store = true
+    Gem::CredentialStore.instance = Gem::CredentialStore.new(backend: nil)
+
+    use_ui @ui do
+      @cfg.rubygems_api_key = "x"
+    end
+
+    assert_match(/plain text/, @ui.error)
+    assert_equal "x", load_yaml_file(@cfg.credentials_path)[:rubygems_api_key]
+  ensure
+    Gem::CredentialStore.reset!
   end
 
   def test_named_backend_routes_reads_and_writes_to_the_store
