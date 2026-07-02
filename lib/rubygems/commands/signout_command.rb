@@ -9,9 +9,11 @@ class Gem::Commands::SignoutCommand < Gem::Command
 
   def description # :nodoc:
     "The `signout` command is used to sign out from all current sessions,"\
-    " allowing you to sign in using a different set of credentials. If the"\
-    " :credential_store: gemrc option is set, the API key is also removed from"\
-    " the credential store it selects."
+    " allowing you to sign in using a different set of credentials. It removes"\
+    " the ~/.gem/credentials file. If the :credential_store: gemrc option is"\
+    " set, it also removes the default RubyGems.org key from the credential"\
+    " store, but a key saved for another host with `gem signin --host` stays in"\
+    " the store and must be removed with your platform's credential manager."
   end
 
   def usage # :nodoc:
