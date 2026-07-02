@@ -3,9 +3,12 @@
 ##
 # Gem::CredentialStore is opt-in storage for authentication secrets (API
 # keys, host credentials) in the operating system's native secret store
-# instead of a plain text file. Platform backends (macOS Keychain, Linux
-# Secret Service, Windows Credential Manager) register themselves with
-# #default_backend as they land; see the credential_store/ directory.
+# instead of a plain text file:
+#
+# * macOS: Keychain, via the +security+ command line tool.
+#
+# Linux and Windows backends register themselves with #default_backend as
+# they land; see the credential_store/ directory.
 #
 # Every public method traps all errors and returns +nil+/+false+ instead of
 # raising, so that callers can transparently fall back to their existing
@@ -50,12 +53,14 @@ class Gem::CredentialStore
   end
 
   ##
-  # No native backend is registered yet; macOS, Linux, and Windows support
-  # land in follow-up commits, each adding its own branch here and
-  # requiring only its own backend file.
+  # Linux and Windows support land in follow-up commits, each adding its
+  # own branch here and requiring only its own backend file.
 
   def self.default_backend
-    nil
+    if RUBY_PLATFORM.include?("darwin")
+      require_relative "credential_store/macos_backend"
+      MacOSBackend
+    end
   end
 
   ##
