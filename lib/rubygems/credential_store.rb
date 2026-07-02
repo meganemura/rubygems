@@ -6,9 +6,11 @@
 # instead of a plain text file:
 #
 # * macOS: Keychain, via the +security+ command line tool.
+# * Linux: the Secret Service API (GNOME Keyring, KWallet, ...), via
+#   +secret-tool+.
 #
-# Linux and Windows backends register themselves with #default_backend as
-# they land; see the credential_store/ directory.
+# A Windows backend registers itself with #default_backend as it lands;
+# see the credential_store/ directory.
 #
 # Every public method traps all errors and returns +nil+/+false+ instead of
 # raising, so that callers can transparently fall back to their existing
@@ -53,13 +55,16 @@ class Gem::CredentialStore
   end
 
   ##
-  # Linux and Windows support land in follow-up commits, each adding its
-  # own branch here and requiring only its own backend file.
+  # Windows support lands in a follow-up commit, adding its own branch
+  # here and requiring only its own backend file.
 
   def self.default_backend
     if RUBY_PLATFORM.include?("darwin")
       require_relative "credential_store/macos_backend"
       MacOSBackend
+    elsif RUBY_PLATFORM.include?("linux")
+      require_relative "credential_store/linux_backend"
+      LinuxBackend if LinuxBackend.available?
     end
   end
 
