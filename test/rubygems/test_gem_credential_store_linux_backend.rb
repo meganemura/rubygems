@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "helper"
-require "rubygems/credential_store/linux_backend"
+require "rubygems/credential_store/native/linux"
 require "json"
 
 class TestGemCredentialStoreLinuxBackend < Gem::TestCase

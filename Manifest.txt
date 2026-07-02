@@ -396,9 +396,9 @@ lib/rubygems/core_ext/kernel_require.rb
 lib/rubygems/core_ext/kernel_warn.rb
 lib/rubygems/core_ext/tcpsocket_init.rb
 lib/rubygems/credential_store.rb
-lib/rubygems/credential_store/linux_backend.rb
-lib/rubygems/credential_store/macos_backend.rb
-lib/rubygems/credential_store/windows_backend.rb
+lib/rubygems/credential_store/native/linux.rb
+lib/rubygems/credential_store/native/macos.rb
+lib/rubygems/credential_store/native/windows.rb
 lib/rubygems/defaults.rb
 lib/rubygems/dependency.rb
 lib/rubygems/dependency_installer.rb

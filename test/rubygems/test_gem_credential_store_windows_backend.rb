@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "helper"
-require "rubygems/credential_store/windows_backend"
+require "rubygems/credential_store/native/windows"
 require "json"
 
 class TestGemCredentialStoreWindowsBackend < Gem::TestCase

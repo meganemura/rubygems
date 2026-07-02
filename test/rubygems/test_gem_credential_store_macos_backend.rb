@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "helper"
-require "rubygems/credential_store/macos_backend"
+require "rubygems/credential_store/native/macos"
 require "json"
 
 class TestGemCredentialStoreMacosBackend < Gem::TestCase

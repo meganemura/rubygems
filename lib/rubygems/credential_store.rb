@@ -120,13 +120,13 @@ class Gem::CredentialStore
 
   def self.default_backend
     if Gem.win_platform?
-      require_relative "credential_store/windows_backend"
+      require_relative "credential_store/native/windows"
       WindowsBackend
     elsif RUBY_PLATFORM.include?("darwin")
-      require_relative "credential_store/macos_backend"
+      require_relative "credential_store/native/macos"
       MacOSBackend
     elsif RUBY_PLATFORM.include?("linux")
-      require_relative "credential_store/linux_backend"
+      require_relative "credential_store/native/linux"
       LinuxBackend if LinuxBackend.available?
     end
   end
