@@ -27,4 +27,20 @@ class TestGemCommandsSignoutCommand < Gem::TestCase
 
     assert_match(/You are not currently signed in/, @sign_out_ui.error)
   end
+
+  def test_execute_when_signed_in_via_credential_store_only # no credentials file
+    Gem.configuration.credential_store = true
+
+    with_fake_credential_store do |store|
+      store.set(Gem::ConfigFile::CREDENTIAL_STORE_DEFAULT_ACCOUNT, "CREDENTIAL_STORE-KEY")
+
+      @sign_out_ui = Gem::MockGemUi.new
+      use_ui(@sign_out_ui) { @cmd.execute }
+
+      assert_match(/You have successfully signed out/, @sign_out_ui.output)
+      assert_nil store.get(Gem::ConfigFile::CREDENTIAL_STORE_DEFAULT_ACCOUNT)
+    end
+  ensure
+    Gem.configuration.credential_store = false
+  end
 end

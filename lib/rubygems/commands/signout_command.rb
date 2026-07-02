@@ -9,7 +9,9 @@ class Gem::Commands::SignoutCommand < Gem::Command
 
   def description # :nodoc:
     "The `signout` command is used to sign out from all current sessions,"\
-    " allowing you to sign in using a different set of credentials."
+    " allowing you to sign in using a different set of credentials. If the"\
+    " :credential_store: gemrc option is enabled, the API key is also removed from the"\
+    " operating system's credential store."
   end
 
   def usage # :nodoc:
@@ -18,10 +20,11 @@ class Gem::Commands::SignoutCommand < Gem::Command
 
   def execute
     credentials_path = Gem.configuration.credentials_path
+    credentials_file_exists = File.exist?(credentials_path)
 
-    if !File.exist?(credentials_path)
+    if !credentials_file_exists && !Gem.configuration.credential_store_signed_in?
       alert_error "You are not currently signed in."
-    elsif !File.writable?(credentials_path)
+    elsif credentials_file_exists && !File.writable?(credentials_path)
       alert_error "File '#{Gem.configuration.credentials_path}' is read-only."\
                   " Please make sure it is writable."
     else
