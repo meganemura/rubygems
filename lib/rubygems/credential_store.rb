@@ -11,6 +11,12 @@
 # * Windows: Credential Manager, via the +Windows.Security.Credentials.PasswordVault+
 #   API from PowerShell.
 #
+# A third party can add another backend (1Password, pass, HashiCorp Vault,
+# ...) by shipping a gem that provides
+# <tt>rubygems/credential_store/backends/<name></tt> and calls
+# .register_backend from it. Users then select it by name instead of +true+
+# (see .resolve_backend).
+#
 # Every public method traps all errors and returns +nil+/+false+ instead of
 # raising, so that callers can transparently fall back to their existing
 # file-based storage when the native store is unavailable or fails (a
@@ -21,29 +27,44 @@ class Gem::CredentialStore
   SERVICE_NAME = "rubygems"
 
   ##
-  # The single, process-wide store instance. Reusing one instance keeps the
-  # backend selection and the read cache shared across every caller in the
-  # process, which matters most on Windows where each PowerShell
-  # invocation costs hundreds of milliseconds.
+  # Returns the store to use for +spec+, or +nil+ when the credential store
+  # is off. +spec+ is either +true+ (use this platform's native backend) or
+  # the name of a registered backend such as "1password". The store is
+  # memoized per +spec+ for the life of the process, so the read cache and
+  # any expensive backend startup are shared across callers. A test may
+  # install a stand-in via #instance= that is returned here for any enabled
+  # +spec+.
+
+  def self.for(spec)
+    return nil unless spec
+    return @override if defined?(@override) && @override
+
+    (@instances ||= {})[spec] ||= new(backend: backend_for(spec))
+  end
+
+  ##
+  # The default-backed store for this platform, i.e. <tt>for(true)</tt>.
+  # Kept for callers and tests that only care about the native backend.
 
   def self.instance
-    @instance ||= new
+    self.for(true)
   end
 
   ##
-  # Overrides the memoized #instance. Intended for tests that need to
-  # inject a store backed by a fake backend.
+  # Installs a stand-in store that .for returns for any enabled setting.
+  # Intended for tests that inject a fake backend.
 
-  def self.instance=(instance)
-    @instance = instance
+  def self.instance=(store)
+    @override = store
   end
 
   ##
-  # Resets the memoized #instance and the one-time warning flag. Intended
-  # for tests only.
+  # Clears the memoized stores, the injected override, and the one-time
+  # warning flag. Intended for tests only.
 
   def self.reset!
-    @instance = nil
+    @override = nil
+    @instances = nil
     @warned = false
   end
 
@@ -52,6 +73,50 @@ class Gem::CredentialStore
     @warned = true
     Gem.ui.alert_warning message
   end
+
+  ##
+  # Registers +backend+ under +name+ so it can be selected with
+  # <tt>credential_store = <name></tt>. A third-party backend gem calls this
+  # from the file RubyGems loads for that name (see .resolve_backend).
+
+  def self.register_backend(name, backend)
+    (@backends ||= {})[name.to_s] = backend
+  end
+
+  BACKEND_NAME = /\A[a-z0-9_-]+\z/
+
+  ##
+  # Resolves a registered backend by +name+, requiring
+  # <tt>rubygems/credential_store/backends/<name></tt> on first use so a
+  # backend shipped as its own gem loads only when actually selected.
+  # Returns +nil+ (warning once) when the name is malformed or no gem
+  # provides it, which makes callers fall back to file storage. The fixed
+  # require prefix and the restricted name charset keep the setting a piece
+  # of data, never a path or a command.
+
+  def self.resolve_backend(name)
+    name = name.to_s
+    unless BACKEND_NAME.match?(name)
+      warn_once "Ignoring invalid credential store backend name #{name.inspect}."
+      return nil
+    end
+
+    return @backends[name] if @backends&.key?(name)
+
+    begin
+      require "rubygems/credential_store/backends/#{name}"
+    rescue LoadError
+      warn_once "Credential store backend #{name.inspect} is not installed; falling back to file storage."
+      return nil
+    end
+
+    @backends && @backends[name]
+  end
+
+  def self.backend_for(spec)
+    spec == true ? default_backend : resolve_backend(spec)
+  end
+  private_class_method :backend_for
 
   def self.default_backend
     if Gem.win_platform?

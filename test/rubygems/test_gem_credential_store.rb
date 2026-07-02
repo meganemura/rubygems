@@ -162,4 +162,66 @@ class TestGemCredentialStore < Gem::TestCase
   def test_instance_returns_the_same_object
     assert_same Gem::CredentialStore.instance, Gem::CredentialStore.instance
   end
+
+  def test_for_returns_nil_when_disabled
+    assert_nil Gem::CredentialStore.for(false)
+    assert_nil Gem::CredentialStore.for(nil)
+  end
+
+  def test_for_memoizes_per_spec
+    Gem::CredentialStore.register_backend("faux", FakeBackend.new)
+
+    assert_same Gem::CredentialStore.for("faux"), Gem::CredentialStore.for("faux")
+  end
+
+  def test_register_and_resolve_backend_roundtrip
+    backend = FakeBackend.new
+    Gem::CredentialStore.register_backend("faux", backend)
+
+    assert_same backend, Gem::CredentialStore.resolve_backend("faux")
+
+    store = Gem::CredentialStore.for("faux")
+    assert store.set("example.org", "s3cr3t")
+    assert_equal "s3cr3t", store.get("example.org")
+    assert_includes backend.calls, [:set, Gem::CredentialStore::SERVICE_NAME, "example.org", "s3cr3t"]
+  end
+
+  def test_resolve_backend_rejects_invalid_name
+    use_ui(@ui) do
+      assert_nil Gem::CredentialStore.resolve_backend("../evil")
+      assert_nil Gem::CredentialStore.resolve_backend("Foo Bar")
+    end
+
+    assert_match(/invalid credential store backend name/, @ui.errs.string)
+  end
+
+  def test_resolve_backend_requires_convention_path_and_registers
+    backends_dir = File.join(@tempdir, "rubygems", "credential_store", "backends")
+    FileUtils.mkdir_p(backends_dir)
+    File.write(File.join(backends_dir, "faux_ext.rb"), <<~RUBY)
+      Gem::CredentialStore.register_backend("faux_ext", Object.new)
+    RUBY
+
+    $LOAD_PATH.unshift(@tempdir)
+
+    refute_nil Gem::CredentialStore.resolve_backend("faux_ext")
+  ensure
+    $LOAD_PATH.delete(@tempdir)
+  end
+
+  def test_resolve_backend_unknown_name_returns_nil_and_warns
+    use_ui(@ui) do
+      assert_nil Gem::CredentialStore.resolve_backend("definitely_not_installed_xyz")
+    end
+
+    assert_match(/is not installed/, @ui.errs.string)
+  end
+
+  def test_instance_override_wins_for_any_enabled_spec
+    fake = Gem::CredentialStore.new(backend: FakeBackend.new)
+    Gem::CredentialStore.instance = fake
+
+    assert_same fake, Gem::CredentialStore.for(true)
+    assert_same fake, Gem::CredentialStore.for("1password")
+  end
 end
