@@ -29,6 +29,7 @@ module Bundler
       ignore_messages
       init_gems_rb
       inline
+      credential_store
       lockfile_checksums
       no_build_extension
       no_install
@@ -185,7 +186,7 @@ module Bundler
     end
 
     def credentials_for(uri)
-      self[uri.to_s] || self[uri.host]
+      credentials_from_store(uri) || self[uri.to_s] || self[uri.host]
     end
 
     def gem_mirrors
@@ -389,6 +390,37 @@ module Bundler
       value.include?(":")
     end
 
+    ##
+    # The Gem::CredentialStore instance to use when the `credential_store`
+    # setting is on, or nil when it is off. Guarded by a cheap boolean check
+    # so reading and writing settings costs nothing extra when the setting is
+    # disabled.
+
+    def active_credential_store
+      return nil unless self[:credential_store]
+
+      require "rubygems/credential_store"
+      Gem::CredentialStore.instance
+    end
+
+    ##
+    # True for keys that aren't reserved for a known bool/number/array/
+    # string setting (or the gem.push_key signing key path), i.e. keys
+    # that are eligible to be a host credential like the ones set via
+    # `bundle config set gems.example.com user:pass`. This mirrors the
+    # heuristic #printable_value already uses to decide whether to redact
+    # a value for display.
+
+    def credential_store_key?(raw_key)
+      !(is_bool(raw_key) || is_num(raw_key) || is_array(raw_key) || is_string(raw_key) || is_credential(raw_key))
+    end
+
+    def credentials_from_store(uri)
+      return nil unless store = active_credential_store
+
+      store.get(uri.to_s) || store.get(uri.host)
+    end
+
     def to_array(value)
       return [] unless value
       value.tr(" ", ":").split(":").map(&:to_sym)
@@ -402,6 +434,15 @@ module Bundler
 
     def set_key(raw_key, value, hash, file)
       raw_key = self.class.key_to_s(raw_key)
+
+      if (store = active_credential_store) && credential_store_key?(raw_key)
+        if value.nil?
+          store.delete(raw_key)
+        elsif value.is_a?(String) && is_userinfo(value) && store.set(raw_key, value)
+          return
+        end
+      end
+
       value = array_to_s(value) if is_array(raw_key)
 
       key = key_for(raw_key)

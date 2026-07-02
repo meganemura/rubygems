@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require "bundler/settings"
+require "rubygems/credential_store"
+require_relative "../support/fake_credential_backend"
 
 RSpec.describe Bundler::Settings do
   subject(:settings) { described_class.new(bundled_app) }
@@ -267,6 +269,87 @@ that would suck --ehhh=oh geez it looks like i might have broken bundler somehow
       it "returns the configured credentials" do
         expect(settings.credentials_for(uri)).to eq(credentials)
       end
+    end
+
+    context "with credential_store enabled" do
+      let(:fake_store) { Gem::CredentialStore.new(backend: FakeCredentialBackend.new) }
+
+      before do
+        settings.set_local "credential_store", "true"
+        Gem::CredentialStore.instance = fake_store
+      end
+
+      after { Gem::CredentialStore.reset! }
+
+      it "returns nil when nothing is configured anywhere" do
+        expect(settings.credentials_for(uri)).to be_nil
+      end
+
+      it "returns credentials stored under the full URL" do
+        fake_store.set(uri.to_s, credentials)
+
+        expect(settings.credentials_for(uri)).to eq(credentials)
+      end
+
+      it "returns credentials stored under the hostname" do
+        fake_store.set(uri.host, credentials)
+
+        expect(settings.credentials_for(uri)).to eq(credentials)
+      end
+
+      it "prefers the credential_store over a stale local config value" do
+        settings.set_local "gemserver.example.org", "stale:value"
+        fake_store.set(uri.host, credentials)
+
+        expect(settings.credentials_for(uri)).to eq(credentials)
+      end
+    end
+  end
+
+  describe "credential storage with credential_store enabled" do
+    let(:fake_store) { Gem::CredentialStore.new(backend: FakeCredentialBackend.new) }
+
+    before do
+      settings.set_local "credential_store", "true"
+      Gem::CredentialStore.instance = fake_store
+    end
+
+    after { Gem::CredentialStore.reset! }
+
+    it "writes a host credential to the credential_store instead of the local config file" do
+      settings.set_local "gemserver.example.org", "username:password"
+
+      expect(fake_store.get("gemserver.example.org")).to eq("username:password")
+      expect(settings.locations("gemserver.example.org")[:local]).to be_nil
+    end
+
+    it "does not route non-credential-shaped values to the credential_store" do
+      settings.set_local "jobs", "4"
+
+      expect(settings["jobs"]).to eq(4)
+    end
+
+    it "does not route the gem.push_key signing key path to the credential_store" do
+      settings.set_local "gem.push_key", "/path/to/key.pem"
+
+      expect(settings["gem.push_key"]).to eq("/path/to/key.pem")
+    end
+
+    it "falls back to the local config file when the credential_store write fails" do
+      Gem::CredentialStore.instance = Gem::CredentialStore.new(backend: nil)
+
+      settings.set_local "gemserver.example.org", "username:password"
+
+      expect(settings["gemserver.example.org"]).to eq("username:password")
+    end
+
+    it "removes a credential_store-stored credential on unset" do
+      settings.set_local "gemserver.example.org", "username:password"
+      expect(fake_store.get("gemserver.example.org")).to eq("username:password")
+
+      settings.set_local "gemserver.example.org", nil
+
+      expect(fake_store.get("gemserver.example.org")).to be_nil
     end
   end
 
