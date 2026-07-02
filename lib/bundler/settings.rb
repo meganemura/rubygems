@@ -29,7 +29,6 @@ module Bundler
       ignore_messages
       init_gems_rb
       inline
-      credential_store
       lockfile_checksums
       no_build_extension
       no_install
@@ -63,6 +62,7 @@ module Bundler
       bin
       cache_path
       console
+      credential_store
       default_cli_command
       gem.ci
       gem.github_username
@@ -391,16 +391,26 @@ module Bundler
     end
 
     ##
-    # The Gem::CredentialStore instance to use when the `credential_store`
-    # setting is on, or nil when it is off. Guarded by a cheap boolean check
-    # so reading and writing settings costs nothing extra when the setting is
-    # disabled.
+    # The Gem::CredentialStore instance to use, or nil when the
+    # `credential_store` setting is off. The value is `true`/`"true"` for this
+    # platform's native backend or a backend name such as `"1password"`.
+    # Guarded by a cheap lookup so reading and writing settings costs nothing
+    # extra when the setting is disabled.
 
     def active_credential_store
-      return nil unless self[:credential_store]
+      spec = credential_store_spec
+      return nil unless spec
 
       require "rubygems/credential_store"
-      Gem::CredentialStore.instance
+      Gem::CredentialStore.for(spec)
+    end
+
+    def credential_store_spec
+      case value = self[:credential_store]
+      when nil, "", "false", false then nil
+      when "true", true then true
+      else value.to_s
+      end
     end
 
     ##

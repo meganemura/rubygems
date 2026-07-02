@@ -304,6 +304,32 @@ that would suck --ehhh=oh geez it looks like i might have broken bundler somehow
         expect(settings.credentials_for(uri)).to eq(credentials)
       end
     end
+
+    context "with a named credential_store backend" do
+      let(:fake_store) { Gem::CredentialStore.new(backend: FakeCredentialBackend.new) }
+
+      before do
+        settings.set_local "credential_store", "1password"
+        Gem::CredentialStore.instance = fake_store
+      end
+
+      after { Gem::CredentialStore.reset! }
+
+      it "reads credentials from the selected backend" do
+        fake_store.set(uri.host, credentials)
+
+        expect(settings.credentials_for(uri)).to eq(credentials)
+      end
+    end
+
+    context "with credential_store set to false" do
+      before { settings.set_local "credential_store", "false" }
+
+      it "does not consult a credential store" do
+        expect(Gem::CredentialStore).not_to receive(:for)
+        expect(settings.credentials_for(uri)).to be_nil
+      end
+    end
   end
 
   describe "credential storage with credential_store enabled" do
