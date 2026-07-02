@@ -52,6 +52,43 @@ class TestGemGemcutterUtilities < Gem::TestCase
     assert_equal "EYKEY", @cmd.api_key
   end
 
+  def test_api_key_from_credential_store_takes_precedence_over_file
+    Gem.configuration.credential_store = true
+
+    with_fake_credential_store do |store|
+      keys = { rubygems_api_key: "FILE-KEY" }
+
+      File.open Gem.configuration.credentials_path, "w" do |f|
+        f.write Gem::ConfigFile.dump_with_rubygems_yaml(keys)
+      end
+
+      Gem.configuration.load_api_keys
+      store.set(Gem::ConfigFile::CREDENTIAL_STORE_DEFAULT_ACCOUNT, "CREDENTIAL_STORE-KEY")
+
+      assert_equal "CREDENTIAL_STORE-KEY", @cmd.api_key
+    end
+  ensure
+    Gem.configuration.credential_store = false
+  end
+
+  def test_api_key_falls_back_to_file_when_no_credential_store_entry
+    Gem.configuration.credential_store = true
+
+    with_fake_credential_store do
+      keys = { rubygems_api_key: "FILE-KEY" }
+
+      File.open Gem.configuration.credentials_path, "w" do |f|
+        f.write Gem::ConfigFile.dump_with_rubygems_yaml(keys)
+      end
+
+      Gem.configuration.load_api_keys
+
+      assert_equal "FILE-KEY", @cmd.api_key
+    end
+  ensure
+    Gem.configuration.credential_store = false
+  end
+
   def test_api_key
     keys = { rubygems_api_key: "KEY" }
 

@@ -48,6 +48,8 @@ module Gem::GemcutterUtilities
       ENV["GEM_HOST_API_KEY"]
     elsif options[:key]
       verify_api_key options[:key]
+    elsif credential_store_key = Gem.configuration.credential_store_api_key_for(host)
+      credential_store_key
     elsif Gem.configuration.api_keys.key?(host)
       Gem.configuration.api_keys[host]
     else
