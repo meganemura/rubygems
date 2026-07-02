@@ -457,6 +457,115 @@ if you believe they were disclosed to a third party.
     assert_equal 0o644, stat.mode & 0o644
   end
 
+  def test_credential_store_defaults_to_false
+    refute @cfg.credential_store
+  end
+
+  def test_credential_store_from_gemrc
+    File.open @temp_conf, "w" do |fp|
+      fp.puts ":credential_store: true"
+    end
+
+    util_config_file %W[--config-file=#{@temp_conf}]
+
+    assert @cfg.credential_store
+  end
+
+  def test_credential_store_from_environment_variable
+    with_env(ENV.to_h.merge("RUBYGEMS_CREDENTIAL_STORE" => "true")) do
+      util_config_file
+    end
+
+    assert @cfg.credential_store
+  end
+
+  def test_rubygems_api_key_equals_with_credential_store_writes_to_credential_store_not_file
+    @cfg.credential_store = true
+
+    with_fake_credential_store do |store|
+      original_file_contents = load_yaml_file(@cfg.credentials_path)
+
+      @cfg.rubygems_api_key = "x"
+
+      assert_equal "x", @cfg.rubygems_api_key
+      assert_equal "x", store.get(Gem::ConfigFile::CREDENTIAL_STORE_DEFAULT_ACCOUNT)
+      assert_equal original_file_contents, load_yaml_file(@cfg.credentials_path)
+    end
+  end
+
+  def test_set_api_key_with_credential_store_writes_to_credential_store_not_file
+    @cfg.credential_store = true
+
+    with_fake_credential_store do |store|
+      original_file_contents = load_yaml_file(@cfg.credentials_path)
+
+      @cfg.set_api_key "https://example.org", "x"
+
+      assert_equal "x", store.get("https://example.org")
+      assert_equal original_file_contents, load_yaml_file(@cfg.credentials_path)
+    end
+  end
+
+  def test_credential_store_api_key_for_checks_host_then_default_account
+    @cfg.credential_store = true
+
+    with_fake_credential_store do |store|
+      assert_nil @cfg.credential_store_api_key_for("https://example.org")
+
+      store.set(Gem::ConfigFile::CREDENTIAL_STORE_DEFAULT_ACCOUNT, "default-key")
+      assert_equal "default-key", @cfg.credential_store_api_key_for("https://example.org")
+
+      store.set("https://example.org", "host-key")
+      assert_equal "host-key", @cfg.credential_store_api_key_for("https://example.org")
+    end
+  end
+
+  def test_credential_store_api_key_for_returns_nil_when_credential_store_disabled
+    with_fake_credential_store do |store|
+      store.set(Gem::ConfigFile::CREDENTIAL_STORE_DEFAULT_ACCOUNT, "default-key")
+
+      assert_nil @cfg.credential_store_api_key_for("https://example.org")
+    end
+  end
+
+  def test_unset_api_key_bang_removes_from_credential_store
+    @cfg.credential_store = true
+
+    with_fake_credential_store do |store|
+      @cfg.rubygems_api_key = "x"
+      assert_equal "x", store.get(Gem::ConfigFile::CREDENTIAL_STORE_DEFAULT_ACCOUNT)
+
+      @cfg.unset_api_key!
+
+      assert_nil store.get(Gem::ConfigFile::CREDENTIAL_STORE_DEFAULT_ACCOUNT)
+    end
+  end
+
+  def test_credential_store_signed_in_reflects_credential_store_only_key
+    @cfg.credential_store = true
+
+    with_fake_credential_store do
+      refute @cfg.credential_store_signed_in?
+
+      @cfg.rubygems_api_key = "x"
+
+      assert @cfg.credential_store_signed_in?
+    end
+  end
+
+  def test_rubygems_api_key_equals_falls_back_to_file_when_credential_store_unavailable
+    @cfg.credential_store = true
+
+    Gem::CredentialStore.instance = Gem::CredentialStore.new(backend: nil)
+
+    @cfg.rubygems_api_key = "x"
+
+    assert_equal "x", @cfg.rubygems_api_key
+    assert_equal({ rubygems_api_key: "x" }, load_yaml_file(@cfg.credentials_path))
+  ensure
+    Gem::CredentialStore.reset!
+  end
+
   def test_write
     @cfg.backtrace = false
     @cfg.update_sources = false

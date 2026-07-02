@@ -63,6 +63,14 @@ class Gem::ConfigFile
   DEFAULT_INSTALL_EXTENSION_IN_LIB = true
   DEFAULT_GLOBAL_GEM_CACHE = false
   DEFAULT_USE_PSYCH = false
+  DEFAULT_CREDENTIAL_STORE = false
+
+  ##
+  # The account name under which the default RubyGems.org API key is
+  # stored in the credential store, mirroring the +:rubygems_api_key+
+  # symbol used by the plain text credentials file.
+
+  CREDENTIAL_STORE_DEFAULT_ACCOUNT = "rubygems_api_key"
 
   ##
   # For Ruby packagers to set configuration defaults.  Set in
@@ -186,6 +194,15 @@ class Gem::ConfigFile
   attr_reader :ssl_client_cert
 
   ##
+  # == Experimental ==
+  # Store and read push/authentication credentials in the operating
+  # system's native credential store (macOS Keychain, Linux Secret
+  # Service, Windows Credential Manager) instead of the plain text
+  # credentials file, when a native store is available on this platform.
+
+  attr_accessor :credential_store
+
+  ##
   # Create the config file object.  +args+ is the list of arguments
   # from the command line.
   #
@@ -219,6 +236,7 @@ class Gem::ConfigFile
     @ipv4_fallback_enabled = ENV["IPV4_FALLBACK_ENABLED"] == "true" || DEFAULT_IPV4_FALLBACK_ENABLED
     @global_gem_cache = ENV["RUBYGEMS_GLOBAL_GEM_CACHE"] == "true" || DEFAULT_GLOBAL_GEM_CACHE
     @use_psych = ENV["RUBYGEMS_USE_PSYCH"] == "true" || DEFAULT_USE_PSYCH
+    @credential_store = ENV["RUBYGEMS_CREDENTIAL_STORE"] == "true" || DEFAULT_CREDENTIAL_STORE
 
     operating_system_config = Marshal.load Marshal.dump(OPERATING_SYSTEM_DEFAULTS)
     platform_config = Marshal.load Marshal.dump(PLATFORM_DEFAULTS)
@@ -241,7 +259,7 @@ class Gem::ConfigFile
       # gemhome and gempath are not working with symbol keys
       if %w[backtrace bulk_threshold verbose update_sources cert_expiration_length_days
             concurrent_downloads install_extension_in_lib ipv4_fallback_enabled
-            global_gem_cache use_psych sources
+            global_gem_cache use_psych credential_store sources
             disable_default_gem_server ssl_verify_mode ssl_ca_cert ssl_client_cert].include?(k)
         k.to_sym
       else
@@ -260,6 +278,7 @@ class Gem::ConfigFile
     @ipv4_fallback_enabled       = @hash[:ipv4_fallback_enabled]       if @hash.key? :ipv4_fallback_enabled
     @global_gem_cache            = @hash[:global_gem_cache]            if @hash.key? :global_gem_cache
     @use_psych                   = @hash[:use_psych]                   if @hash.key? :use_psych
+    @credential_store            = @hash[:credential_store]            if @hash.key? :credential_store
 
     @home                        = @hash[:gemhome]                     if @hash.key? :gemhome
     @path                        = @hash[:gempath]                     if @hash.key? :gempath
@@ -358,15 +377,51 @@ if you believe they were disclosed to a third party.
   # Sets the RubyGems.org API key to +api_key+
 
   def rubygems_api_key=(api_key)
+    if credential_store && !api_key.to_s.empty? && (store = active_credential_store) && store.set(CREDENTIAL_STORE_DEFAULT_ACCOUNT, api_key)
+      @rubygems_api_key = api_key
+      return
+    end
+
     set_api_key :rubygems_api_key, api_key
 
     @rubygems_api_key = api_key
   end
 
   ##
+  # Looks up +host+'s API key from the credential store, when the
+  # #credential_store setting is on. Checks the host-specific account first,
+  # then the account used for the default RubyGems.org key, so a single call
+  # covers both the <tt>--host</tt> and default-host cases. Returns +nil+ when
+  # credential storage is disabled, unavailable, or has no matching entry.
+
+  def credential_store_api_key_for(host)
+    return nil unless credential_store
+    return nil unless store = active_credential_store
+
+    store.get(host.to_s) || store.get(CREDENTIAL_STORE_DEFAULT_ACCOUNT)
+  end
+
+  ##
+  # True if the default RubyGems.org API key is present in the credential
+  # store. Used by the +signout+ command, whose file-based check
+  # (+credentials_path+ existence) misses a key that was only ever stored
+  # in the credential store.
+
+  def credential_store_signed_in?
+    return false unless credential_store
+    return false unless store = active_credential_store
+
+    !store.get(CREDENTIAL_STORE_DEFAULT_ACCOUNT).nil?
+  end
+
+  ##
   # Set a specific host's API key to +api_key+
 
   def set_api_key(host, api_key)
+    if credential_store && host != :rubygems_api_key && !api_key.to_s.empty? && (store = active_credential_store) && store.set(host.to_s, api_key)
+      return
+    end
+
     check_credentials_permissions
 
     config = load_file(credentials_path).merge(host => api_key)
@@ -384,9 +439,13 @@ if you believe they were disclosed to a third party.
   end
 
   ##
-  # Remove the +~/.gem/credentials+ file to clear all the current sessions.
+  # Remove the +~/.gem/credentials+ file to clear all the current sessions,
+  # and the default RubyGems.org key from the credential store, when the
+  # #credential_store setting is on.
 
   def unset_api_key!
+    active_credential_store&.delete(CREDENTIAL_STORE_DEFAULT_ACCOUNT)
+
     return false unless File.exist?(credentials_path)
 
     File.delete(credentials_path)
@@ -632,6 +691,13 @@ if you believe they were disclosed to a third party.
     end
 
     config
+  end
+
+  def active_credential_store
+    return nil unless credential_store
+
+    require_relative "credential_store"
+    Gem::CredentialStore.instance
   end
 
   def set_config_file_name(args)
