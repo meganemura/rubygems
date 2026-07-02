@@ -167,6 +167,13 @@ learn more about their operation in [bundle install(1)](bundle-install.1.html).
    window and remain resolvable. If you rely on cooldown for
    supply-chain protection, confirm that the gem server emits
    `created_at` in its `/info/<gem>` responses.
+* `credential_store` (`BUNDLE_CREDENTIAL_STORE`):
+   Experimental: store and read host credentials (the values otherwise set
+   via `bundle config set <host> <user:pass>`) in the operating system's
+   native credential store (macOS Keychain, Linux Secret Service, Windows
+   Credential Manager) instead of the plain text config file, when a
+   native store is available on this platform. Falls back to the config
+   file when the native store is unavailable or fails. Defaults to false.
 * `default_cli_command` (`BUNDLE_DEFAULT_CLI_COMMAND`):
    The command that running `bundle` without arguments should run. Defaults to
    `cli_help` since Bundler 4, but can also be `install` which was the previous
