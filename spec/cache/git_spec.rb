@@ -83,6 +83,29 @@ RSpec.describe "bundle cache with git" do
     expect(the_bundle).to include_gems "foo 1.0"
   end
 
+  it "caches a repository shared by multiple gems only once" do
+    build_lib "foo", path: lib_path("shared/foo")
+    build_lib "bar", path: lib_path("shared/bar")
+    build_git "foo", path: lib_path("shared")
+    git = build_git "bar", path: lib_path("shared")
+    ref = git.ref_for("main", 11)
+
+    install_gemfile <<-G
+      source "https://gem.repo1"
+      git "#{lib_path("shared")}" do
+        gem "foo"
+        gem "bar"
+      end
+    G
+
+    bundle :cache
+
+    expect(bundled_app("vendor/cache/shared-#{ref}")).to exist
+
+    FileUtils.rm_r lib_path("shared")
+    expect(the_bundle).to include_gems "foo 1.0", "bar 1.0"
+  end
+
   it "tracks updates" do
     git = build_git "foo"
     old_ref = git.ref_for("main", 11)
