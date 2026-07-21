@@ -83,7 +83,9 @@ RSpec.describe "bundle cache with git" do
     expect(the_bundle).to include_gems "foo 1.0"
   end
 
-  it "caches a repository shared by multiple gems only once" do
+  # The copy count is asserted in spec/bundler/source/git_spec.rb, which can
+  # observe `copy_to` in-process.
+  it "caches a repository shared by multiple gems" do
     build_lib "foo", path: lib_path("shared/foo")
     build_lib "bar", path: lib_path("shared/bar")
     build_git "foo", path: lib_path("shared")
