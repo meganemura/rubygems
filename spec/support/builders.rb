@@ -454,9 +454,12 @@ module Spec
         end
 
         @context.replace_version_file(@spec.version, dir: build_path)
-        @context.replace_changelog(@spec.version, dir: build_path) if options[:released]
+        if options[:released]
+          @context.replace_changelog(@spec.version, dir: build_path)
+          @context.replace_release_date(dir: build_path)
+        end
 
-        Spec::BuildMetadata.write_build_metadata(dir: build_path, version: @spec.version.to_s)
+        Spec::BuildMetadata.write_build_metadata(dir: build_path)
 
         Dir.chdir build_path do
           Gem::DefaultUserInteraction.use_ui(Gem::SilentUI.new) do

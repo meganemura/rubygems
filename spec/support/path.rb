@@ -304,11 +304,21 @@ module Spec
       File.open(gemspec_file, "w") {|f| f << contents }
     end
 
+    RELEASED_FIXTURE_DATE = Time.new(2100, 1, 1)
+
     def replace_changelog(version, dir:)
       changelog = File.expand_path("CHANGELOG-bundler.md", dir)
       contents = File.readlines(changelog)
-      contents = [contents[0], contents[1], "## #{version} (2100-01-01)\n", *contents[3..-1]].join
+      contents = [contents[0], contents[1], "## #{version} (#{RELEASED_FIXTURE_DATE.strftime("%Y-%m-%d")})\n", *contents[3..-1]].join
       File.open(changelog, "w") {|f| f << contents }
+    end
+
+    def replace_release_date(dir:)
+      build_metadata_file = File.expand_path("lib/bundler/build_metadata.rb", dir)
+      contents = File.read(build_metadata_file)
+      ivar = "    @built_at = #{RELEASED_FIXTURE_DATE.strftime("%Y-%m-%d").dump}.freeze"
+      contents.sub!(/^(\s+# begin ivars).+(^\s+# end ivars)/m, "\\1\n#{ivar}\n\\2")
+      File.open(build_metadata_file, "w") {|f| f << contents }
     end
 
     def git_root

@@ -23,8 +23,8 @@ class Release
       cut_changelog!
     end
 
-    def cut_changelog!
-      @changelog.cut!(previous_version, relevant_pull_requests, extra_entry: extra_entry)
+    def cut_changelog!(released_at: Time.now)
+      @changelog.cut!(previous_version, relevant_pull_requests, extra_entry: extra_entry, released_at: released_at)
     end
 
     def bump_versions!
@@ -82,6 +82,14 @@ class Release
 
     def extra_entry
       nil
+    end
+
+    def write_release_date(released_at:, dir: File.expand_path("..", __dir__))
+      build_metadata_file = File.expand_path("lib/bundler/build_metadata.rb", dir)
+      contents = File.read(build_metadata_file)
+      ivar = "    @built_at = #{released_at.strftime("%Y-%m-%d").dump}.freeze"
+      contents.sub!(/^(\s+# begin ivars).+(^\s+# end ivars)/m, "\\1\n#{ivar}\n\\2")
+      File.open(build_metadata_file, "w") {|f| f << contents }
     end
   end
 
@@ -344,7 +352,10 @@ class Release
   def cut_changelogs_and_bump_versions
     system("git", "branch", "#{@release_branch}-bkp")
 
-    @bundler.cut_changelog!
+    released_at = Time.now
+
+    @bundler.cut_changelog!(released_at: released_at)
+    @bundler.write_release_date(released_at: released_at)
     system("git", "commit", "-am", "Changelog for Bundler version #{@bundler.version}", exception: true)
     bundler_changelog = `git show --no-patch --pretty=format:%h`
 
@@ -352,7 +363,7 @@ class Release
     system("bin/rake", "version:update_locked_bundler", exception: true)
     system("git", "commit", "-am", "Bump Bundler version to #{@bundler.version}", exception: true)
 
-    @rubygems.cut_changelog!
+    @rubygems.cut_changelog!(released_at: released_at)
     system("git", "commit", "-am", "Changelog for Rubygems version #{@rubygems.version}", exception: true)
     rubygems_changelog = `git show --no-patch --pretty=format:%h`
 

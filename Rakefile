@@ -184,7 +184,7 @@ task rubocop: %w[rubocop:setup rubocop:run]
 # Creating a release
 
 task prerelease: %w[clobber install_release_dependencies bundler:build_metadata check_deprecations]
-task postrelease: %w[upload guides:publish blog:publish bundler:build_metadata:clean]
+task postrelease: %w[upload guides:publish blog:publish bundler:build_metadata:clean bundler:build_metadata:reset_built_at]
 
 desc "Check for deprecated methods with expired deprecation horizon"
 task :check_deprecations do
@@ -762,7 +762,19 @@ namespace :bundler do
   namespace :build_metadata do
     desc "Reset build metadata file after release"
     task :clean do
-      Spec::BuildMetadata.reset_build_metadata
+      # Discards the uncommitted git_commit_sha; built_at is reset_built_at's job.
+      sh "git", "checkout", "--", "lib/bundler/build_metadata.rb"
+    end
+
+    desc "Reset built_at now that the release has shipped, and push it"
+    task :reset_built_at do
+      Spec::BuildMetadata.reset_built_at
+
+      sh "git", "add", "lib/bundler/build_metadata.rb"
+      sh "git", "diff", "--cached", "--quiet"
+    rescue StandardError
+      sh "git", "commit", "-m", "Reset build metadata after releasing #{v}"
+      sh "git", "push", noop: ENV["DRYRUN"]
     end
   end
 

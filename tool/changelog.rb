@@ -106,11 +106,11 @@ class Changelog
     types << last_change_type
   end
 
-  def cut!(previous_version, included_pull_requests, extra_entry: nil)
+  def cut!(previous_version, included_pull_requests, extra_entry: nil, released_at: Time.now)
     full_new_changelog = [
       "# Changelog",
       "",
-      format_header,
+      format_header(released_at),
       "",
       unreleased_notes_for(included_pull_requests, extra_entry: extra_entry),
       released_notes_until(previous_version),
@@ -153,11 +153,11 @@ class Changelog
 
   attr_reader :version
 
-  def format_header
+  def format_header(released_at = Time.now)
     new_header = header_template.gsub(/%new_version/, version.to_s)
 
     if header_template.include?("%release_date")
-      new_header = new_header.gsub(/%release_date/, Time.now.strftime(release_date_format))
+      new_header = new_header.gsub(/%release_date/, released_at.strftime(release_date_format))
     end
 
     new_header
